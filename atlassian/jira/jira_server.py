@@ -2294,32 +2294,33 @@ class Jira(AtlassianRestAPI):
         list: A list of matches.
         """
         regex_output = []
-        issue_output = self.get_issue(issue, fields="description,comment")
-        description = issue_output["fields"]["description"]
-        comments = issue_output["fields"]["comment"]["comments"]
 
         try:
+            issue_output = self.get_issue(issue, fields="description,comment")
+            description = issue_output["fields"]["description"]
+            comments = issue_output["fields"]["comment"]["comments"]
             if description is not None:
                 description_matches = [x.group(0) for x in re.finditer(regex, description)]
                 if description_matches:
                     regex_output.extend(description_matches)
 
-                for comment in comments:
-                    comment_html = comment["body"]
-                    comment_matches = [x.group(0) for x in re.finditer(regex, comment_html)]
-                    if comment_matches:
-                        regex_output.extend(comment_matches)
+            for comment in comments:
+                comment_html = comment["body"]
+                comment_matches = [x.group(0) for x in re.finditer(regex, comment_html)]
+                if comment_matches:
+                    regex_output.extend(comment_matches)
 
             return regex_output
         except HTTPError as e:
             if e.response.status_code == 404:
                 # Raise ApiError as the documented reason is ambiguous
-                log.error("couldn't find issue: ", issue)
+                log.error("couldn't find issue: %s", issue)
                 raise ApiNotFoundError(
                     "There is no content with the given issue ud,"
                     "or the calling user does not have permission to view the issue",
                     reason=e,
                 )
+            raise
 
     def get_issue_remotelinks(
         self, issue_key: str, global_id: Optional[T_id] = None, internal_id: Optional[str] = None

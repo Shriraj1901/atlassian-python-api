@@ -585,8 +585,8 @@ class Server(ConfluenceServerBase):
         :return: A list of regex matches.
         """
         regex_output = []
-        page_output = self.get_page_by_id(page_id, expand="body.storage")["body"]["storage"]["value"]
         try:
+            page_output = self.get_page_by_id(page_id, expand="body.storage")["body"]["storage"]["value"]
             if page_output is not None:
                 description_matches = [x.group(0) for x in re.finditer(regex, page_output)]
                 if description_matches:
@@ -595,12 +595,13 @@ class Server(ConfluenceServerBase):
         except HTTPError as e:
             if e.response.status_code == 404:
                 # Raise ApiError as the documented reason is ambiguous
-                log.error("couldn't find page_id : ", page_id)
+                log.error("couldn't find page_id : %s", page_id)
                 raise ApiNotFoundError(
                     "There is no content with the given page id,"
                     "or the calling user does not have permission to view the page",
                     reason=e,
                 )
+            raise
 
     def get_page_labels(self, page_id, prefix=None, start=None, limit=None):
         """

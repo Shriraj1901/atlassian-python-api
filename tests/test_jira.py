@@ -5,9 +5,10 @@ from io import BytesIO
 from unittest import TestCase
 from unittest.mock import patch, sentinel
 
-from requests import HTTPError, Request
+from requests import HTTPError, Request, Response
 
 from atlassian import jira
+from atlassian.errors import ApiNotFoundError
 
 from .mockup import mockup_server
 
@@ -20,6 +21,49 @@ class TestJira(TestCase):
         """Can retrieve an Issue by ID"""
         resp = self.jira.issue("FOO-123")
         self.assertEqual(resp["key"], "FOO-123")
+
+    @patch.object(jira.Jira, "get_issue")
+    def test_scrap_regex_from_issue_returns_matches(self, mock_get_issue):
+        mock_get_issue.return_value = {
+            "fields": {
+                "description": "See FOO-1",
+                "comment": {"comments": [{"body": "and FOO-22"}]},
+            }
+        }
+
+        self.assertEqual(self.jira.scrap_regex_from_issue("FOO-123", r"FOO-\d+"), ["FOO-1", "FOO-22"])
+
+    @patch.object(jira.Jira, "get_issue")
+    def test_scrap_regex_from_issue_scans_comments_when_there_is_no_description(self, mock_get_issue):
+        mock_get_issue.return_value = {
+            "fields": {
+                "description": None,
+                "comment": {"comments": [{"body": "fixed in FOO-22"}]},
+            }
+        }
+
+        self.assertEqual(self.jira.scrap_regex_from_issue("FOO-123", r"FOO-\d+"), ["FOO-22"])
+
+    @patch.object(jira.Jira, "get_issue")
+    def test_scrap_regex_from_issue_missing_issue_raises_not_found(self, mock_get_issue):
+        response = Response()
+        response.status_code = 404
+        mock_get_issue.side_effect = HTTPError(response=response)
+
+        with self.assertLogs("atlassian.jira.jira_server", level="ERROR") as logs:
+            with self.assertRaises(ApiNotFoundError):
+                self.jira.scrap_regex_from_issue("FOO-404", r"FOO-\d+")
+
+        self.assertIn("FOO-404", logs.output[0])
+
+    @patch.object(jira.Jira, "get_issue")
+    def test_scrap_regex_from_issue_does_not_hide_other_http_errors(self, mock_get_issue):
+        response = Response()
+        response.status_code = 500
+        mock_get_issue.side_effect = HTTPError(response=response)
+
+        with self.assertRaises(HTTPError):
+            self.jira.scrap_regex_from_issue("FOO-123", r"FOO-\d+")
 
     def test_get_issue_remote_links_supports_json_list_responses(self):
         links = self.jira.get_issue_remote_links("FOO-123")

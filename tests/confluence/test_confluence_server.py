@@ -352,6 +352,33 @@ class TestConfluenceServer:
             "tables_content": [[["Name", "Value"]]],
         }
 
+    @patch.object(ConfluenceServer, "get_page_by_id")
+    def test_scrap_regex_from_page_returns_matches(self, mock_get_page_by_id, confluence_server):
+        mock_get_page_by_id.return_value = {"body": {"storage": {"value": "<p>PROJ-1 and PROJ-22</p>"}}}
+
+        assert confluence_server.scrap_regex_from_page("123", r"PROJ-\d+") == ["PROJ-1", "PROJ-22"]
+
+    @patch.object(ConfluenceServer, "get_page_by_id")
+    def test_scrap_regex_from_page_missing_page_raises_not_found(self, mock_get_page_by_id, confluence_server, caplog):
+        response = Response()
+        response.status_code = 404
+        mock_get_page_by_id.side_effect = HTTPError(response=response)
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ApiNotFoundError):
+                confluence_server.scrap_regex_from_page("123", r"PROJ-\d+")
+
+        assert "123" in caplog.text
+
+    @patch.object(ConfluenceServer, "get_page_by_id")
+    def test_scrap_regex_from_page_does_not_hide_other_http_errors(self, mock_get_page_by_id, confluence_server):
+        response = Response()
+        response.status_code = 500
+        mock_get_page_by_id.side_effect = HTTPError(response=response)
+
+        with pytest.raises(HTTPError):
+            confluence_server.scrap_regex_from_page("123", r"PROJ-\d+")
+
     @patch.object(ConfluenceServer, "get_page_id")
     def test_attach_content_raises_when_target_page_cannot_be_resolved(self, mock_get_page_id, confluence_server):
         mock_get_page_id.return_value = None
